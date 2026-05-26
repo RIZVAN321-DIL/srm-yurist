@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Юрист</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e}
+        .login-overlay{display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);justify-content:center;align-items:center;z-index:9999}
+        .login-box{background:white;padding:40px;border-radius:16px;width:90%;max-width:400px;text-align:center}
+        .login-box h2{margin-bottom:24px;color:#1a1a2e}
+        .login-box input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;font-size:16px}
+        .login-box button{width:100%;padding:14px;background:#1a1a2e;color:white;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;margin-top:8px}
+        .login-error{color:#c0392b;font-size:14px;margin-top:8px;min-height:20px}
+        .app-layout{display:flex;min-height:100vh}
+        .sidebar{width:240px;background:#1a1a2e;color:white;padding:20px;display:flex;flex-direction:column;gap:10px}
+        .sidebar h2{color:#c9a96e;margin-bottom:20px;font-size:20px}
+        .sidebar a{color:white;text-decoration:none;padding:12px 16px;border-radius:8px;display:block;font-size:15px;transition:all 0.2s;cursor:pointer}
+        .sidebar a:hover{background:#2a2a4e}
+        .sidebar a.active{background:#c9a96e;color:#1a1a2e;font-weight:600}
+        .main{flex:1;padding:30px}
+        .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+        .header h1{font-size:24px}
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+        .stat-card{background:white;padding:20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+        .stat-card .value{font-size:32px;font-weight:700;color:#c9a96e}
+        .stat-card .label{color:#888;font-size:14px;margin-top:4px}
+        table{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+        th{background:#1a1a2e;color:white;padding:12px 16px;text-align:left;font-weight:600}
+        td{padding:12px 16px;border-bottom:1px solid #eee}
+        tr:hover{background:#f8f9fa}
+        .btn{padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;margin:2px}
+        .btn-primary{background:#1a1a2e;color:white}
+        .btn-success{background:#27ae60;color:white}
+        .btn-danger{background:#c0392b;color:white}
+        .badge{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600}
+        .badge-active{background:#27ae60;color:white}
+        .badge-new{background:#3498db;color:white}
+        .badge-closed{background:#888;color:white}
+        .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
+        .modal.active{display:flex}
+        .modal-content{background:white;padding:30px;border-radius:12px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto}
+        .form-group{margin-bottom:16px}
+        .form-group label{display:block;font-weight:600;margin-bottom:4px;font-size:14px}
+        .form-group input,.form-group select,.form-group textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:15px}
+        .form-group textarea{min-height:80px;resize:vertical}
+        .form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+        .logout-btn{background:#c0392b;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600}
+        .upload-zone{border:2px dashed #ddd;border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:all 0.2s;margin:16px 0}
+        .upload-zone:hover{border-color:#c9a96e;background:#fafafa}
+        @media(max-width:768px){.sidebar{display:none}.stats{grid-template-columns:repeat(2,1fr)}}
+    </style>
+</head>
+<body>
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-box">
+            <h2>⚖️ CRM Юрист</h2>
+            <input type="text" id="loginInput" placeholder="Логин" value="admin">
+            <input type="password" id="passInput" placeholder="Пароль" value="admin123">
+            <button onclick="doLogin()">Войти</button>
+            <div class="login-error" id="loginError"></div>
+        </div>
+    </div>
+
+    <div class="app-layout" id="appLayout" style="display:none">
+        <div class="sidebar">
+            <h2>⚖️ CRM Юрист</h2>
+            <a class="active" onclick="showTab('dashboard')">📊 Дашборд</a>
+            <a onclick="showTab('clients')">👥 Клиенты</a>
+            <a onclick="showTab('cases')">📁 Дела</a>
+            <a onclick="showTab('users')">👨‍💼 Сотрудники</a>
+            <button class="logout-btn" onclick="doLogout()" style="margin-top:auto">🚪 Выйти</button>
+        </div>
+        <div class="main" id="content">
+            <div class="header"><h1>📊 Дашборд</h1></div>
+            <div class="stats" id="stats"></div>
+            <div id="table-container"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="modal"><div class="modal-content" id="modal-content"></div></div>
+
+    <script>
+        let TOKEN = localStorage.getItem('crm_token') || '';
+        let currentTab = 'dashboard';
+
+        async function api(url, options = {}) {
+            const headers = { ...options.headers };
+            if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
+            const res = await fetch(url, { ...options, headers });
+            if (res.status === 401) { doLogout(); throw new Error('Unauthorized'); }
+            return res.json();
+        }
+
+        async function doLogin() {
+            const login = document.getElementById('loginInput').value;
+            const password = document.getElementById('passInput').value;
+            document.getElementById('loginError').textContent = '';
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({login, password})
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    TOKEN = data.token;
+                    localStorage.setItem('crm_token', TOKEN);
+                    document.getElementById('loginOverlay').style.display = 'none';
+                    document.getElementById('appLayout').style.display = 'flex';
+                    showTab('dashboard');
+                } else {
+                    document.getElementById('loginError').textContent = data.detail || 'Ошибка входа';
+                }
+            } catch (e) {
+                document.getElementById('loginError').textContent = 'Ошибка соединения';
+            }
+        }
+
+        function doLogout() {
+            TOKEN = '';
+            localStorage.removeItem('crm_token');
+            document.getElementById('loginOverlay').style.display = 'flex';
+            document.getElementById('appLayout').style.display = 'none';
+        }
+
+        async function showTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+            event?.target?.classList?.add('active');
+            document.getElementById('table-container').innerHTML = '';
+            if (tab === 'dashboard') await loadDashboard();
+            else if (tab === 'clients') await loadClients();
+            else if (tab === 'cases') await loadCases();
+            else if (tab === 'users') await loadUsers();
+        }
+
+        async function loadDashboard() {
+            document.querySelector('.header h1').textContent = '📊 Дашборд';
+            const stats = await api('/api/dashboard/stats');
+            document.getElementById('stats').innerHTML = `
+                <div class="stat-card"><div class="value">${stats.total_clients||0}</div><div class="label">Всего клиентов</div></div>
+                <div class="stat-card"><div class="value">${stats.total_cases||0}</div><div class="label">Всего дел</div></div>
+                <div class="stat-card"><div class="value">${stats.active_cases||0}</div><div class="label">Активных дел</div></div>
+                <div class="stat-card"><div class="value">${stats.closed_cases||0}</div><div class="label">Закрытых дел</div></div>
+            `;
+        }
+
+        async function loadClients() {
+            document.querySelector('.header h1').textContent = '👥 Клиенты';
+            document.getElementById('stats').innerHTML = '';
+            const clients = await api('/api/clients');
+            let html = '<button class="btn btn-success" onclick="showClientForm()" style="margin-bottom:16px">➕ Добавить клиента</button><table><tr><th>ID</th><th>ФИО</th><th>Телефон</th><th>Email</th><th>Статус</th><th></th></tr>';
+            clients.forEach(c => {
+                html += `<tr><td>${c.id}</td><td>${c.full_name||''}</td><td>${c.phone||'—'}</td><td>${c.email||'—'}</td><td><span class="badge badge-${c.status==='active'?'active':'closed'}">${c.status||'—'}</span></td><td><button class="btn btn-primary" onclick="editClient(${c.id})">✏️</button> <button class="btn btn-danger" onclick="deleteClient(${c.id})">🗑️</button></td></tr>`;
+            });
+            html += '</table>';
+            document.getElementById('table-container').innerHTML = html;
+        }
+
+        async function loadCases() {
+            document.querySelector('.header h1').textContent = '📁 Дела';
+            document.getElementById('stats').innerHTML = '';
+            const cases = await api('/api/cases');
+            let html = '<button class="btn btn-success" onclick="showCaseForm()" style="margin-bottom:16px">➕ Добавить дело</button><table><tr><th>ID</th><th>Название</th><th>Тип</th><th>Клиент</th><th>Статус</th><th></th></tr>';
+            cases.forEach(c => {
+                html += `<tr><td>${c.id}</td><td><a href="#" onclick="viewCase(${c.id})" style="color:#3498db;text-decoration:none">${c.title||''}</a></td><td>${c.case_type||'—'}</td><td>${c.client_name||'—'}</td><td><span class="badge badge-${c.status==='new'?'new':c.status==='active'?'active':'closed'}">${c.status||'—'}</span></td><td><button class="btn btn-primary" onclick="editCase(${c.id})">✏️</button> <button class="btn btn-danger" onclick="deleteCase(${c.id})">🗑️</button></td></tr>`;
+            });
+            html += '</table>';
+            document.getElementById('table-container').innerHTML = html;
+        }
+
+        async function loadUsers() {
+            document.querySelector('.header h1').textContent = '👨‍💼 Сотрудники';
+            document.getElementById('stats').innerHTML = '';
+            const users = await api('/api/users');
+            let html = '<button class="btn btn-success" onclick="showUserForm()" style="margin-bottom:16px">➕ Добавить сотрудника</button><table><tr><th>ID</th><th>ФИО</th><th>Логин</th><th>Роль</th></tr>';
+            users.forEach(u => {
+                html += `<tr><td>${u.id}</td><td>${u.full_name||''}</td><td>${u.login||''}</td><td>${u.role||'—'}</td></tr>`;
+            });
+            html += '</table>';
+            document.getElementById('table-container').innerHTML = html;
+        }
+
+        function showClientForm() {
+            document.getElementById('modal').classList.add('active');
+            document.getElementById('modal-content').innerHTML = `
+                <h2>Добавить клиента</h2>
+                <div class="form-group"><label>ФИО</label><input id="cfname"></div>
+                <div class="form-group"><label>Телефон</label><input id="cphone"></div>
+                <div class="form-group"><label>Email</label><input id="cemail"></div>
+                <div class="form-actions"><button class="btn btn-primary" onclick="saveClient()">Сохранить</button><button class="btn btn-danger" onclick="closeModal()">Отмена</button></div>
+            `;
+        }
+
+        async function saveClient() {
+            const data = {full_name:document.getElementById('cfname').value, phone:document.getElementById('cphone').value, email:document.getElementById('cemail').value};
+            await api('/api/clients', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+            closeModal(); loadClients();
+        }
+
+        function showCaseForm() {
+            document.getElementById('modal').classList.add('active');
+            document.getElementById('modal-content').innerHTML = `
+                <h2>Добавить дело</h2>
+                <div class="form-group"><label>Клиент ID</label><input id="cclient" type="number"></div>
+                <div class="form-group"><label>Название</label><input id="ctitle"></div>
+                <div class="form-group"><label>Тип</label><input id="ctype"></div>
+                <div class="form-group"><label>Описание</label><textarea id="cdesc"></textarea></div>
+                <div class="form-actions"><button class="btn btn-primary" onclick="saveCase()">Сохранить</button><button class="btn btn-danger" onclick="closeModal()">Отмена</button></div>
+            `;
+        }
+
+        async function saveCase() {
+            const data = {client_id:parseInt(document.getElementById('cclient').value), title:document.getElementById('ctitle').value, case_type:document.getElementById('ctype').value, description:document.getElementById('cdesc').value};
+            await api('/api/cases', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+            closeModal(); loadCases();
+        }
+
+        function showUserForm() {
+            document.getElementById('modal').classList.add('active');
+            document.getElementById('modal-content').innerHTML = `
+                <h2>Добавить сотрудника</h2>
+                <div class="form-group"><label>ФИО</label><input id="ufname"></div>
+                <div class="form-group"><label>Логин</label><input id="ulogin"></div>
+                <div class="form-group"><label>Пароль</label><input id="upass" type="password"></div>
+                <div class="form-group"><label>Роль</label><select id="urole"><option value="lawyer">Юрист</option><option value="admin">Админ</option><option value="secretary">Секретарь</option></select></div>
+                <div class="form-actions"><button class="btn btn-primary" onclick="saveUser()">Сохранить</button><button class="btn btn-danger" onclick="closeModal()">Отмена</button></div>
+            `;
+        }
+
+        async function saveUser() {
+            const data = {full_name:document.getElementById('ufname').value, login:document.getElementById('ulogin').value, password:document.getElementById('upass').value, role:document.getElementById('urole').value};
+            await api('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+            closeModal(); loadUsers();
+        }
+
+        async function deleteClient(id) { if (confirm('Удалить клиента?')) { await api('/api/clients/'+id, {method:'DELETE'}); loadClients(); } }
+        async function deleteCase(id) { if (confirm('Удалить дело?')) { await api('/api/cases/'+id, {method:'DELETE'}); loadCases(); } }
+
+        async function viewCase(id) {
+            const c = await api('/api/cases/'+id);
+            document.getElementById('modal').classList.add('active');
+            let docsHtml = c.documents?.map(d => `<p><a href="${d.file_path}" target="_blank">📄 ${d.name}</a></p>`).join('') || '<p>Нет документов</p>';
+            document.getElementById('modal-content').innerHTML = `
+                <h2>${c.title}</h2>
+                <p><b>Клиент:</b> ${c.client?.full_name||'—'} | <b>Тип:</b> ${c.case_type||'—'} | <b>Статус:</b> ${c.status}</p>
+                <h3 style="margin-top:16px">Документы</h3>${docsHtml}
+                <div class="upload-zone" onclick="document.getElementById('fileInput').click()">📎 Нажмите для загрузки документа</div>
+                <input type="file" id="fileInput" style="display:none" onchange="uploadDoc(${id})">
+                <div class="form-actions"><button class="btn btn-danger" onclick="closeModal()">Закрыть</button></div>
+            `;
+        }
+
+        async function uploadDoc(caseId) {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('case_id', caseId);
+            const res = await fetch('/api/documents/upload', {method:'POST', headers:{'Authorization':'Bearer '+TOKEN}, body:fd});
+            const data = await res.json();
+            if (data.ok) { alert('Документ загружен!'); viewCase(caseId); }
+            else { alert(data.detail || 'Ошибка загрузки'); }
+        }
+
+        function closeModal() { document.getElementById('modal').classList.remove('active'); }
+
+        if (TOKEN) {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('appLayout').style.display = 'flex';
+            showTab('dashboard');
+        }
+    </script>
+</body>
+</html>
