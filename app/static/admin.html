@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Юрист v6.3</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#f0f2f5;--card:#fff;--text:#1a1a2e;--sidebar:#1a1a2e;--accent:#c9a96e;--danger:#c0392b;--success:#27ae60}
+        body.dark{--bg:#0d0d0d;--card:#1a1a1a;--text:#f5f5f5;--sidebar:#111}
+        body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text)}
+        .login-overlay{display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);justify-content:center;align-items:center;z-index:9999}
+        .login-box{background:var(--card);padding:40px;border-radius:16px;width:90%;max-width:420px;text-align:center}
+        .login-box h2{margin-bottom:24px}
+        .login-box input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;font-size:16px;background:var(--bg);color:var(--text)}
+        .login-box button{width:100%;padding:14px;background:var(--accent);color:#1a1a2e;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;margin-top:8px}
+        .login-error{color:var(--danger);font-size:14px;margin-top:8px}
+        .app-layout{display:flex;min-height:100vh}
+        .sidebar{width:240px;background:var(--sidebar);color:white;padding:20px;display:flex;flex-direction:column;gap:8px}
+        .sidebar h2{color:var(--accent);margin-bottom:16px;font-size:20px}
+        .sidebar a{color:white;text-decoration:none;padding:12px 16px;border-radius:8px;display:block;font-size:14px;cursor:pointer}
+        .sidebar a:hover{background:#2a2a4e}
+        .sidebar a.active{background:var(--accent);color:#1a1a2e;font-weight:600}
+        .main{flex:1;padding:30px;overflow-y:auto}
+        .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+        .header h1{font-size:24px}
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+        .stat-card{background:var(--card);padding:20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+        .stat-card .value{font-size:32px;font-weight:700;color:var(--accent)}
+        .stat-card .label{color:#888;font-size:14px;margin-top:4px}
+        table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+        th{background:var(--sidebar);color:white;padding:12px 16px;text-align:left;font-weight:600}
+        td{padding:12px 16px;border-bottom:1px solid #eee}
+        tr:hover{background:var(--bg)}
+        .btn{padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;margin:2px}
+        .btn-primary{background:var(--sidebar);color:white}
+        .btn-success{background:var(--success);color:white}
+        .btn-danger{background:var(--danger);color:white}
+        .badge{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600}
+        .badge-active{background:var(--success);color:white}
+        .badge-new{background:#3498db;color:white}
+        .badge-closed{background:#888;color:white}
+        .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
+        .modal.active{display:flex}
+        .modal-content{background:var(--card);padding:30px;border-radius:12px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto;color:var(--text)}
+        .form-group{margin-bottom:16px}
+        .form-group label{display:block;font-weight:600;margin-bottom:4px;font-size:14px}
+        .form-group input,.form-group select,.form-group textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:15px;background:var(--bg);color:var(--text)}
+        .form-group textarea{min-height:80px;resize:vertical}
+        .form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+        .logout-btn{background:var(--danger);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600}
+        .theme-toggle{background:transparent;border:1px solid var(--accent);color:var(--accent);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+        @media(max-width:768px){.sidebar{display:none}.stats{grid-template-columns:repeat(2,1fr)}}
+    </style>
+</head>
+<body>
+<div class="login-overlay" id="loginOverlay"><div class="login-box"><h2>⚖️ CRM Юрист</h2><input type="text" id="loginInput" placeholder="Логин"><input type="password" id="passInput" placeholder="Пароль"><button onclick="App.doLogin()">Войти</button><div class="login-error" id="loginError"></div></div></div>
+<div class="app-layout" id="appLayout" style="display:none"><div class="sidebar" id="sidebar"></div><div class="main" id="content"><div class="header"><h1>📊 Дашборд</h1><button class="theme-toggle" onclick="App.toggleTheme()">🌓 Тема</button></div><div class="stats" id="stats"></div><div id="table-container"></div></div></div>
+<div class="modal" id="modal"><div class="modal-content" id="modal-content"></div></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/modules/dashboard.js"></script>
+<script src="/static/js/modules/clients.js"></script>
+<script src="/static/js/modules/cases.js"></script>
+<script src="/static/js/modules/users.js"></script>
+<script src="/static/js/modules/finance.js"></script>
+</body>
+</html>
