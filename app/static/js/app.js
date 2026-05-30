@@ -11,7 +11,8 @@ const App = {
         if (res.status === 423) { alert('Аккаунт заблокирован на 15 минут.'); throw new Error('Locked'); }
         if (!res.ok) {
             const d = await res.json().catch(() => ({}));
-            throw new Error(d.detail || 'Ошибка сервера');
+            const msg = typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail || d);
+            throw new Error(msg || 'Ошибка сервера');
         }
         return res.json();
     },
@@ -67,6 +68,7 @@ const App = {
         const n1 = document.getElementById('newpw').value;
         const n2 = document.getElementById('newpw2').value;
         const errEl = document.getElementById('pwError');
+        errEl.textContent = '';
         if (n1.length < 6) { errEl.textContent = 'Пароль должен быть не менее 6 символов'; return; }
         if (n1 !== n2) { errEl.textContent = 'Пароли не совпадают'; return; }
         try {
@@ -81,7 +83,7 @@ const App = {
                 App.navigate('dashboard');
                 alert('✅ Пароль успешно изменён!');
             }
-        } catch (e) { errEl.textContent = e.message; }
+        } catch (e) { errEl.textContent = App.getErrorMsg(e); }
     },
 
     // ========== NAVIGATION ==========
@@ -161,11 +163,7 @@ const App = {
                 </div>
             `;
         } catch (e) {
-            document.getElementById('contentArea').innerHTML = `
-                <div class="content-card"><div class="empty-state">
-                    <span class="empty-icon">⚠️</span><p>Не удалось загрузить дашборд</p>
-                </div></div>
-            `;
+            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">⚠️</span><p>Не удалось загрузить дашборд</p></div></div>`;
         }
     },
 
@@ -185,21 +183,22 @@ const App = {
                     </div>
                     <div class="table-wrap">
                         <table>
-                            <thead><tr><th>ID</th><th>ФИО</th><th>Телефон</th><th>Email</th><th>Статус</th><th>Действия</th></tr></thead>
+                            <thead><tr><th>ID</th><th>ФИО</th><th>Телефон</th><th>Email</th><th>Статус</th><th></th></tr></thead>
                             <tbody>`;
             if (data.length === 0) {
                 html += `<tr><td colspan="6"><div class="empty-state"><span class="empty-icon">📭</span><p>Клиенты не найдены</p></div></td></tr>`;
             } else {
                 data.forEach(c => {
                     const badge = c.status === 'active' ? 'badge-active' : 'badge-closed';
+                    const statusText = c.status === 'active' ? 'Активен' : 'Неактивен';
                     html += `
                         <tr>
                             <td><strong>#${c.id}</strong></td>
                             <td><span class="text-link" onclick="App.viewClient(${c.id})">${App.escHtml(c.full_name)}</span></td>
                             <td>${App.escHtml(c.phone || '—')}</td>
                             <td>${App.escHtml(c.email || '—')}</td>
-                            <td><span class="badge ${badge}">${c.status === 'active' ? 'Активен' : 'Неактивен'}</span></td>
-                            <td class="gap-2">
+                            <td><span class="badge ${badge}">${statusText}</span></td>
+                            <td style="display:flex;gap:6px;">
                                 <button class="btn btn-accent btn-sm" onclick="App.editClient(${c.id})">✏️</button>
                                 <button class="btn btn-danger btn-sm" onclick="App.deleteClient(${c.id})">🗑</button>
                             </td>
@@ -209,7 +208,7 @@ const App = {
             html += `</tbody></table></div></div>`;
             document.getElementById('contentArea').innerHTML = html;
         } catch (e) {
-            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">⚠️</span><p>Ошибка загрузки</p></div></div>`;
+            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">⚠️</span><p>Ошибка загрузки клиентов</p></div></div>`;
         }
     },
 
@@ -225,11 +224,12 @@ const App = {
 
     showClientForm() {
         App.openModal('➕ Новый клиент', `
-            <div class="form-group"><label>ФИО *</label><input id="cfname"></div>
-            <div class="form-group"><label>Телефон</label><input id="cphone"></div>
-            <div class="form-group"><label>Email</label><input id="cemail"></div>
-            <div class="form-group"><label>Теги</label><input id="ctags"></div>
-            <div class="form-group"><label>Заметки</label><textarea id="cnotes"></textarea></div>
+            <div class="form-group"><label>ФИО *</label><input id="cfname" required></div>
+            <div class="form-group"><label>Телефон</label><input id="cphone" type="tel" placeholder="+7 999 123-45-67"></div>
+            <div class="form-group"><label>Email</label><input id="cemail" type="email" placeholder="client@mail.ru"></div>
+            <div class="form-group"><label>Теги</label><input id="ctags" placeholder="VIP, постоянный"></div>
+            <div class="form-group"><label>Заметки</label><textarea id="cnotes" placeholder="Любая дополнительная информация..."></textarea></div>
+            <div id="clientFormError" style="color:var(--danger);font-size:13px;margin-top:4px;"></div>
             <div class="form-actions">
                 <button class="btn btn-outline" onclick="App.closeModal()">Отмена</button>
                 <button class="btn btn-accent" onclick="App.saveClient()">Сохранить</button>
@@ -238,16 +238,29 @@ const App = {
     },
 
     async saveClient() {
-        const data = {
-            full_name: document.getElementById('cfname').value,
-            phone: document.getElementById('cphone').value,
-            email: document.getElementById('cemail').value,
-            tags: document.getElementById('ctags').value,
-            notes: document.getElementById('cnotes').value
-        };
-        if (!data.full_name) { alert('Введите ФИО'); return; }
-        try { await App.api('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); App.closeModal(); App.loadClients(); }
-        catch (e) { alert(e.message); }
+        const errEl = document.getElementById('clientFormError');
+        if (errEl) errEl.textContent = '';
+        const full_name = document.getElementById('cfname').value.trim();
+        const phone = document.getElementById('cphone').value.trim();
+        const email = document.getElementById('cemail').value.trim();
+        const tags = document.getElementById('ctags').value.trim();
+        const notes = document.getElementById('cnotes').value.trim();
+
+        if (!full_name) {
+            if (errEl) errEl.textContent = 'Введите ФИО';
+            else alert('Введите ФИО');
+            return;
+        }
+        const data = { full_name, phone, email, tags, notes };
+        try {
+            await App.api('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            App.closeModal();
+            App.loadClients();
+        } catch (e) {
+            const msg = App.getErrorMsg(e);
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+        }
     },
 
     async editClient(id) {
@@ -259,7 +272,8 @@ const App = {
                 <div class="form-group"><label>Email</label><input id="cemail" value="${App.escHtml(c.email || '')}"></div>
                 <div class="form-group"><label>Теги</label><input id="ctags" value="${App.escHtml(c.tags || '')}"></div>
                 <div class="form-group"><label>Заметки</label><textarea id="cnotes">${App.escHtml(c.notes || '')}</textarea></div>
-                <p class="text-muted mt-2">🔗 ${window.location.origin}/client/${c.access_code}</p>
+                <p class="text-muted mt-2">🔗 Ссылка для клиента: ${window.location.origin}/client/${c.access_code}</p>
+                <div id="clientEditError" style="color:var(--danger);font-size:13px;margin-top:4px;"></div>
                 <div class="form-actions">
                     <button class="btn btn-outline" onclick="App.closeModal()">Отмена</button>
                     <button class="btn btn-accent" onclick="App.updateClient(${id})">Сохранить</button>
@@ -269,33 +283,42 @@ const App = {
     },
 
     async updateClient(id) {
+        const errEl = document.getElementById('clientEditError');
+        if (errEl) errEl.textContent = '';
         const data = {
-            full_name: document.getElementById('cfname').value,
-            phone: document.getElementById('cphone').value,
-            email: document.getElementById('cemail').value,
-            tags: document.getElementById('ctags').value,
-            notes: document.getElementById('cnotes').value
+            full_name: document.getElementById('cfname').value.trim(),
+            phone: document.getElementById('cphone').value.trim(),
+            email: document.getElementById('cemail').value.trim(),
+            tags: document.getElementById('ctags').value.trim(),
+            notes: document.getElementById('cnotes').value.trim()
         };
-        try { await App.api(`/api/clients/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); App.closeModal(); App.loadClients(); }
-        catch (e) { alert(e.message); }
+        try {
+            await App.api(`/api/clients/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            App.closeModal();
+            App.loadClients();
+        } catch (e) {
+            const msg = App.getErrorMsg(e);
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+        }
     },
 
     async deleteClient(id) {
         if (!confirm('Удалить клиента и все связанные дела?')) return;
         try { await App.api(`/api/clients/${id}`, { method: 'DELETE' }); App.loadClients(); }
-        catch (e) { alert(e.message); }
+        catch (e) { alert(App.getErrorMsg(e)); }
     },
 
     async viewClient(id) {
         try {
             const c = await App.api(`/api/clients/${id}`);
             App.openModal(`👤 ${App.escHtml(c.full_name)}`, `
-                <p><strong>Телефон:</strong> ${App.escHtml(c.phone || '—')}</p>
-                <p><strong>Email:</strong> ${App.escHtml(c.email || '—')}</p>
-                <p><strong>Статус:</strong> ${c.status}</p>
-                <p><strong>Теги:</strong> ${App.escHtml(c.tags || '—')}</p>
-                <p><strong>Заметки:</strong> ${App.escHtml(c.notes || '—')}</p>
-                <p class="text-muted mt-2">🔗 ${window.location.origin}/client/${c.access_code}</p>
+                <p><strong>📞 Телефон:</strong> ${App.escHtml(c.phone || '—')}</p>
+                <p><strong>📧 Email:</strong> ${App.escHtml(c.email || '—')}</p>
+                <p><strong>📌 Статус:</strong> ${c.status === 'active' ? 'Активен' : 'Неактивен'}</p>
+                <p><strong>🏷 Теги:</strong> ${App.escHtml(c.tags || '—')}</p>
+                <p><strong>📝 Заметки:</strong> ${App.escHtml(c.notes || '—')}</p>
+                <p class="text-muted mt-2">🔗 <a href="${window.location.origin}/client/${c.access_code}" target="_blank" class="text-link">Открыть портал клиента</a></p>
                 <div class="form-actions"><button class="btn btn-outline" onclick="App.closeModal()">Закрыть</button></div>
             `);
         } catch (e) { alert('Ошибка'); }
@@ -316,14 +339,13 @@ const App = {
                     </div>
                     <div class="table-wrap">
                         <table>
-                            <thead><tr><th>ID</th><th>Название</th><th>Тип</th><th>Клиент</th><th>Ответственный</th><th>Статус</th><th>Действия</th></tr></thead>
+                            <thead><tr><th>ID</th><th>Название</th><th>Тип</th><th>Клиент</th><th>Ответственный</th><th>Статус</th><th></th></tr></thead>
                             <tbody>`;
             if (data.length === 0) {
                 html += `<tr><td colspan="7"><div class="empty-state"><span class="empty-icon">📭</span><p>Дела не найдены</p></div></td></tr>`;
             } else {
                 data.forEach(c => {
-                    let badgeClass = 'badge-new';
-                    let badgeText = 'Новое';
+                    let badgeClass = 'badge-new', badgeText = 'Новое';
                     if (c.status === 'active') { badgeClass = 'badge-active'; badgeText = 'В работе'; }
                     else if (c.status === 'closed') { badgeClass = 'badge-closed'; badgeText = 'Закрыто'; }
                     html += `
@@ -334,7 +356,7 @@ const App = {
                             <td>${App.escHtml(c.client_name || '—')}</td>
                             <td>${App.escHtml(c.owner_name || '—')}</td>
                             <td><span class="badge ${badgeClass}">${badgeText}</span></td>
-                            <td class="gap-2">
+                            <td style="display:flex;gap:6px;">
                                 <button class="btn btn-accent btn-sm" onclick="App.editCase(${c.id})">✏️</button>
                                 <button class="btn btn-danger btn-sm" onclick="App.deleteCase(${c.id})">🗑</button>
                             </td>
@@ -344,16 +366,17 @@ const App = {
             html += `</tbody></table></div></div>`;
             document.getElementById('contentArea').innerHTML = html;
         } catch (e) {
-            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">⚠️</span><p>Ошибка загрузки</p></div></div>`;
+            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">⚠️</span><p>Ошибка загрузки дел</p></div></div>`;
         }
     },
 
     showCaseForm() {
         App.openModal('➕ Новое дело', `
-            <div class="form-group"><label>Клиент ID *</label><input id="cclient" type="number"></div>
-            <div class="form-group"><label>Название *</label><input id="ctitle"></div>
-            <div class="form-group"><label>Тип дела</label><input id="ctype"></div>
-            <div class="form-group"><label>Описание</label><textarea id="cdesc"></textarea></div>
+            <div class="form-group"><label>ID клиента *</label><input id="cclient" type="number" required></div>
+            <div class="form-group"><label>Название дела *</label><input id="ctitle" required></div>
+            <div class="form-group"><label>Тип дела</label><input id="ctype" placeholder="Гражданское, уголовное..."></div>
+            <div class="form-group"><label>Описание</label><textarea id="cdesc" placeholder="Подробности дела..."></textarea></div>
+            <div id="caseFormError" style="color:var(--danger);font-size:13px;margin-top:4px;"></div>
             <div class="form-actions">
                 <button class="btn btn-outline" onclick="App.closeModal()">Отмена</button>
                 <button class="btn btn-accent" onclick="App.saveCase()">Сохранить</button>
@@ -362,22 +385,38 @@ const App = {
     },
 
     async saveCase() {
+        const errEl = document.getElementById('caseFormError');
+        if (errEl) errEl.textContent = '';
+        const client_id = parseInt(document.getElementById('cclient').value);
+        const title = document.getElementById('ctitle').value.trim();
+        if (!client_id || !title) {
+            const msg = 'Заполните ID клиента и название дела';
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+            return;
+        }
         const data = {
-            client_id: parseInt(document.getElementById('cclient').value),
-            title: document.getElementById('ctitle').value,
-            case_type: document.getElementById('ctype').value,
-            description: document.getElementById('cdesc').value
+            client_id,
+            title,
+            case_type: document.getElementById('ctype').value.trim(),
+            description: document.getElementById('cdesc').value.trim()
         };
-        if (!data.client_id || !data.title) { alert('Заполните обязательные поля'); return; }
-        try { await App.api('/api/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); App.closeModal(); App.loadCases(); }
-        catch (e) { alert(e.message); }
+        try {
+            await App.api('/api/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            App.closeModal();
+            App.loadCases();
+        } catch (e) {
+            const msg = App.getErrorMsg(e);
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+        }
     },
 
     async viewCase(id) {
         try {
             const c = await App.api(`/api/cases/${id}`);
             let docsHtml = (c.documents || []).map(d => `<p>📄 <a href="${d.file_path}" target="_blank" class="text-link">${App.escHtml(d.name)}</a></p>`).join('') || '<p class="text-muted">Нет документов</p>';
-            let paysHtml = (c.payments || []).map(p => `<p>💰 ${p.amount} ₽ — ${p.status}</p>`).join('') || '<p class="text-muted">Нет платежей</p>';
+            let paysHtml = (c.payments || []).map(p => `<p>💰 ${(p.amount || 0).toLocaleString()} ₽ — ${p.status === 'paid' ? 'Оплачен' : 'Ожидает'}</p>`).join('') || '<p class="text-muted">Нет платежей</p>';
             App.openModal(`📁 ${App.escHtml(c.title)}`, `
                 <p><strong>Клиент:</strong> ${App.escHtml(c.client?.full_name || '—')}</p>
                 <p><strong>Статус:</strong> ${c.status}</p>
@@ -403,6 +442,7 @@ const App = {
                     <option value="active" ${c.status==='active'?'selected':''}>В работе</option>
                     <option value="closed" ${c.status==='closed'?'selected':''}>Закрыто</option>
                 </select></div>
+                <div id="caseEditError" style="color:var(--danger);font-size:13px;margin-top:4px;"></div>
                 <div class="form-actions">
                     <button class="btn btn-outline" onclick="App.closeModal()">Отмена</button>
                     <button class="btn btn-accent" onclick="App.updateCase(${id})">Сохранить</button>
@@ -412,20 +452,29 @@ const App = {
     },
 
     async updateCase(id) {
+        const errEl = document.getElementById('caseEditError');
+        if (errEl) errEl.textContent = '';
         const data = {
-            title: document.getElementById('ctitle').value,
-            case_type: document.getElementById('ctype').value,
-            description: document.getElementById('cdesc').value,
+            title: document.getElementById('ctitle').value.trim(),
+            case_type: document.getElementById('ctype').value.trim(),
+            description: document.getElementById('cdesc').value.trim(),
             status: document.getElementById('cstatus').value
         };
-        try { await App.api(`/api/cases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); App.closeModal(); App.loadCases(); }
-        catch (e) { alert(e.message); }
+        try {
+            await App.api(`/api/cases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            App.closeModal();
+            App.loadCases();
+        } catch (e) {
+            const msg = App.getErrorMsg(e);
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+        }
     },
 
     async deleteCase(id) {
         if (!confirm('Удалить дело?')) return;
         try { await App.api(`/api/cases/${id}`, { method: 'DELETE' }); App.loadCases(); }
-        catch (e) { alert(e.message); }
+        catch (e) { alert(App.getErrorMsg(e)); }
     },
 
     // ========== USERS ==========
@@ -442,16 +491,17 @@ const App = {
             html += `</tbody></table></div></div>`;
             document.getElementById('contentArea').innerHTML = html;
         } catch (e) {
-            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">🔒</span><p>Нет доступа</p></div></div>`;
+            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">🔒</span><p>Нет доступа к списку сотрудников</p></div></div>`;
         }
     },
 
     showUserForm() {
         App.openModal('➕ Новый сотрудник', `
-            <div class="form-group"><label>ФИО *</label><input id="ufname"></div>
-            <div class="form-group"><label>Логин *</label><input id="ulogin"></div>
-            <div class="form-group"><label>Пароль *</label><input id="upass" type="password" minlength="6"></div>
+            <div class="form-group"><label>ФИО *</label><input id="ufname" required></div>
+            <div class="form-group"><label>Логин *</label><input id="ulogin" required></div>
+            <div class="form-group"><label>Пароль * (мин. 6 символов)</label><input id="upass" type="password" minlength="6" required></div>
             <div class="form-group"><label>Роль</label><select id="urole"><option value="lawyer">Юрист</option><option value="admin">Админ</option></select></div>
+            <div id="userFormError" style="color:var(--danger);font-size:13px;margin-top:4px;"></div>
             <div class="form-actions">
                 <button class="btn btn-outline" onclick="App.closeModal()">Отмена</button>
                 <button class="btn btn-accent" onclick="App.saveUser()">Сохранить</button>
@@ -460,15 +510,29 @@ const App = {
     },
 
     async saveUser() {
+        const errEl = document.getElementById('userFormError');
+        if (errEl) errEl.textContent = '';
         const data = {
-            full_name: document.getElementById('ufname').value,
-            login: document.getElementById('ulogin').value,
+            full_name: document.getElementById('ufname').value.trim(),
+            login: document.getElementById('ulogin').value.trim(),
             password: document.getElementById('upass').value,
             role: document.getElementById('urole').value
         };
-        if (!data.full_name || !data.login || !data.password) { alert('Заполните все поля'); return; }
-        try { await App.api('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); App.closeModal(); App.loadUsers(); }
-        catch (e) { alert(e.message); }
+        if (!data.full_name || !data.login || !data.password) {
+            const msg = 'Заполните все поля';
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+            return;
+        }
+        try {
+            await App.api('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            App.closeModal();
+            App.loadUsers();
+        } catch (e) {
+            const msg = App.getErrorMsg(e);
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+        }
     },
 
     // ========== FINANCE ==========
@@ -489,7 +553,7 @@ const App = {
                 <div class="content-card">
                     <h3><span class="section-icon">💰</span> Финансы</h3>
                     <div class="table-wrap"><table>
-                        <thead><tr><th>ID</th><th>Дело</th><th>Сумма</th><th>Описание</th><th>Статус</th><th>Действия</th></tr></thead><tbody>`;
+                        <thead><tr><th>ID</th><th>Дело</th><th>Сумма</th><th>Описание</th><th>Статус</th><th></th></tr></thead><tbody>`;
             if (payments.length === 0) {
                 html += `<tr><td colspan="6"><div class="empty-state"><span class="empty-icon">📭</span><p>Платежей нет</p></div></td></tr>`;
             } else {
@@ -503,7 +567,7 @@ const App = {
                             <td><strong>${(p.amount || 0).toLocaleString()} ₽</strong></td>
                             <td>${App.escHtml(p.description || '—')}</td>
                             <td><span class="badge ${badge}">${badgeText}</span></td>
-                            <td>
+                            <td style="display:flex;gap:6px;">
                                 <button class="btn btn-success btn-sm" onclick="App.markPaid(${p.id})">✅</button>
                                 <button class="btn btn-danger btn-sm" onclick="App.deletePayment(${p.id})">🗑</button>
                             </td>
@@ -513,15 +577,16 @@ const App = {
             html += `</tbody></table></div></div>`;
             document.getElementById('contentArea').innerHTML = html;
         } catch (e) {
-            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">⚠️</span><p>Ошибка загрузки</p></div></div>`;
+            document.getElementById('contentArea').innerHTML = `<div class="content-card"><div class="empty-state"><span class="empty-icon">⚠️</span><p>Ошибка загрузки финансов</p></div></div>`;
         }
     },
 
     showPaymentForm() {
         App.openModal('➕ Новый платёж', `
-            <div class="form-group"><label>Дело ID *</label><input id="pcase" type="number"></div>
-            <div class="form-group"><label>Сумма (₽) *</label><input id="pamount" type="number"></div>
-            <div class="form-group"><label>Описание</label><input id="pdesc"></div>
+            <div class="form-group"><label>ID дела *</label><input id="pcase" type="number" required></div>
+            <div class="form-group"><label>Сумма (₽) *</label><input id="pamount" type="number" required></div>
+            <div class="form-group"><label>Описание</label><input id="pdesc" placeholder="Назначение платежа..."></div>
+            <div id="payFormError" style="color:var(--danger);font-size:13px;margin-top:4px;"></div>
             <div class="form-actions">
                 <button class="btn btn-outline" onclick="App.closeModal()">Отмена</button>
                 <button class="btn btn-accent" onclick="App.savePayment()">Сохранить</button>
@@ -530,25 +595,37 @@ const App = {
     },
 
     async savePayment() {
-        const data = {
-            case_id: parseInt(document.getElementById('pcase').value),
-            amount: parseInt(document.getElementById('pamount').value),
-            description: document.getElementById('pdesc').value
-        };
-        if (!data.case_id || !data.amount) { alert('Заполните обязательные поля'); return; }
-        try { await App.api('/api/payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); App.closeModal(); App.loadFinance(); }
-        catch (e) { alert(e.message); }
+        const errEl = document.getElementById('payFormError');
+        if (errEl) errEl.textContent = '';
+        const case_id = parseInt(document.getElementById('pcase').value);
+        const amount = parseInt(document.getElementById('pamount').value);
+        if (!case_id || !amount) {
+            const msg = 'Заполните ID дела и сумму';
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+            return;
+        }
+        const data = { case_id, amount, description: document.getElementById('pdesc').value.trim() };
+        try {
+            await App.api('/api/payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            App.closeModal();
+            App.loadFinance();
+        } catch (e) {
+            const msg = App.getErrorMsg(e);
+            if (errEl) errEl.textContent = msg;
+            else alert(msg);
+        }
     },
 
     async markPaid(id) {
         try { await App.api(`/api/payments/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'paid' }) }); App.loadFinance(); }
-        catch (e) { alert(e.message); }
+        catch (e) { alert(App.getErrorMsg(e)); }
     },
 
     async deletePayment(id) {
         if (!confirm('Удалить платёж?')) return;
         try { await App.api(`/api/payments/${id}`, { method: 'DELETE' }); App.loadFinance(); }
-        catch (e) { alert(e.message); }
+        catch (e) { alert(App.getErrorMsg(e)); }
     },
 
     // ========== MODAL ==========
@@ -568,8 +645,14 @@ const App = {
         const div = document.createElement('div');
         div.appendChild(document.createTextNode(str));
         return div.innerHTML;
+    },
+    getErrorMsg(e) {
+        if (!e) return 'Неизвестная ошибка';
+        const msg = e.message || e.toString();
+        if (msg === '[object Object]') return 'Ошибка сервера. Проверьте правильность данных.';
+        if (msg.includes('validation') || msg.includes('phone') || msg.includes('email')) return 'Проверьте правильность введённых данных.';
+        return msg;
     }
 };
 
-// Init
 if (localStorage.getItem('crm_theme') === 'dark') document.body.classList.add('dark');
