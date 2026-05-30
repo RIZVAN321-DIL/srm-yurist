@@ -10,7 +10,7 @@ from app.models.case import Case
 from app.models.activity import Activity
 from app.models.stage import Stage
 from app.core.auth_middleware import get_current_user
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 
 router = APIRouter(prefix="/api", tags=["cases"])
@@ -26,7 +26,7 @@ async def get_case(case_id: int, session=Depends(get_session), user=Depends(get_
     repo = CaseRepository(session); case = await repo.get_by_id(case_id)
     if not case: raise HTTPException(404)
     if user["role"] != "admin" and case.owner_id != user["user_id"]: raise HTTPException(403)
-    return {"id": case.id, "title": case.title, "case_type": case.case_type, "status": case.status, "description": case.description, "statute_deadline": case.statute_deadline.isoformat() if case.statute_deadline else None, "parent_case_id": case.parent_case_id, "client": {"id": case.client.id, "full_name": case.client.full_name} if case.client else None, "owner": {"id": case.owner.id, "full_name": case.owner.full_name} if case.owner else None, "stages": [{"id": s.id, "name": s.name, "status": s.status, "is_completed": s.is_completed} for s in case.stages], "documents": [{"id": d.id, "name": d.name, "file_path": f"/api/documents/{d.id}/download"} for d in case.documents], "payments": [{"id": p.id, "amount": p.amount, "status": p.status, "description": p.description} for p in case.payments], "activities": [{"id": a.id, "action": a.action, "description": a.description, "user_name": a.user.full_name if a.user else "—"} for a in case.activities]}
+    return {"id": case.id, "title": case.title, "case_type": case.case_type, "status": case.status, "description": case.description, "statute_deadline": case.statute_deadline.isoformat() if case.statute_deadline else None, "parent_case_id": case.parent_case_id, "client": {"id": case.client.id, "full_name": case.client.full_name} if case.client else None, "owner": {"id": case.owner.id, "full_name": case.owner.full_name} if case.owner else None, "stages": [{"id": s.id, "name": s.name, "status": s.status, "is_completed": s.is_completed, "deadline": s.deadline.isoformat() if s.deadline else None, "order": s.order} for s in case.stages], "documents": [{"id": d.id, "name": d.name, "file_path": f"/api/documents/{d.id}/download"} for d in case.documents], "payments": [{"id": p.id, "amount": p.amount, "status": p.status, "description": p.description} for p in case.payments], "activities": [{"id": a.id, "action": a.action, "description": a.description, "user_name": a.user.full_name if a.user else "—"} for a in case.activities]}
 
 @router.post("/cases")
 async def create_case(data: CaseCreate, session=Depends(get_session), user=Depends(get_current_user)):
@@ -38,10 +38,14 @@ async def create_case(data: CaseCreate, session=Depends(get_session), user=Depen
     if data.template_id:
         tmpl = await CaseTemplateRepository(session).get_by_id(data.template_id)
         if tmpl:
-            stages_data = json.loads(tmpl.stages_json); sr = StageRepository(session)
+            stages_data = json.loads(tmpl.stages_json)
+            sr = StageRepository(session)
+            now = datetime.now(timezone.utc)
             for i, s in enumerate(stages_data):
-                await sr.create(Stage(case_id=result.id, name=s["name"], description=s.get("description",""), order=i, assigned_to=user["user_id"]))
-    await ActivityRepository(session).create(Activity(case_id=result.id, user_id=user["user_id"], action="create", description="Дело создано"))
+                days = s.get("days", 7)
+                deadline = now + timedelta(days=days)
+                await sr.create(Stage(case_id=result.id, name=s["name"], description=s.get("description", ""), order=i, assigned_to=user["user_id"], deadline=deadline))
+    await ActivityRepository(session).create(Activity(case_id=result.id, user_id=user["user_id"], action="create", description=f"Дело создано: {data.title}"))
     await session.commit(); return {"ok": True, "id": result.id}
 
 @router.put("/cases/{case_id}")
