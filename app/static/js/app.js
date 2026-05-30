@@ -1,5 +1,12 @@
 const App = {
     csrfToken: '', user: null, currentTab: 'dashboard',
+    modules: {
+        dashboard: DashboardModule,
+        clients: clientsModule,
+        cases: casesModule,
+        users: usersModule,
+        finance: financeModule
+    },
     async api(url, options = {}) {
         const headers = { ...options.headers, 'X-CSRF-Token': App.csrfToken };
         const res = await fetch(url, { ...options, headers, credentials: 'include' });
@@ -43,7 +50,17 @@ const App = {
         html += '<button class="logout-btn" onclick="App.logout()" style="margin-top:auto">🚪 Выйти</button>';
         document.getElementById('sidebar').innerHTML = html;
     },
-    async showTab(tab) { App.currentTab=tab; App.renderSidebar(); document.getElementById('table-container').innerHTML=''; const fn=window[tab]?.load||DashboardModule.load; await fn(); },
+    async showTab(tab) {
+        App.currentTab = tab;
+        App.renderSidebar();
+        document.getElementById('table-container').innerHTML = '';
+        const module = App.modules[tab];
+        if (module && module.load) {
+            await module.load();
+        } else {
+            await DashboardModule.load();
+        }
+    },
     toggleTheme() { document.body.classList.toggle('dark'); localStorage.setItem('crm_theme', document.body.classList.contains('dark')?'dark':'light'); },
     closeModal() { document.getElementById('modal').classList.remove('active'); },
     text(str) { const div=document.createElement('div'); div.appendChild(document.createTextNode(str||'')); return div.innerHTML; }
