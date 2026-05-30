@@ -14,12 +14,21 @@ router = APIRouter(prefix="/api", tags=["auth"])
 async def login(data: UserLogin, response: Response, request: Request, session: AsyncSession = Depends(get_session)):
     repo = UserRepository(session); user = await repo.get_by_login(data.login)
     if not user: raise HTTPException(404, detail="Пользователь не найден")
-    if user.locked_until and user.locked_until > datetime.now(timezone.utc): raise HTTPException(423)
+    now = datetime.now(timezone.utc)
+    if user.locked_until:
+        locked = user.locked_until
+        if locked.tzinfo is None:
+            locked = locked.replace(tzinfo=timezone.utc)
+        if locked > now:
+            raise HTTPException(423, detail="Аккаунт заблокирован")
     if not verify_password(data.password, user.password_hash):
-        attempts = (user.login_attempts or 0) + 1; locked = None
-        if attempts >= settings.LOGIN_MAX_ATTEMPTS: locked = datetime.now(timezone.utc) + timedelta(minutes=settings.LOGIN_TIMEOUT_MINUTES)
+        attempts = (user.login_attempts or 0) + 1
+        locked = None
+        if attempts >= settings.LOGIN_MAX_ATTEMPTS:
+            locked = now + timedelta(minutes=settings.LOGIN_TIMEOUT_MINUTES)
         await repo.update(user.id, login_attempts=attempts, locked_until=locked)
-        await session.commit(); raise HTTPException(403)
+        await session.commit()
+        raise HTTPException(403, detail="Неверный пароль")
     await repo.update(user.id, login_attempts=0, locked_until=None); await session.commit()
     token = create_token(user.id, user.role); csrf_token = generate_csrf_token()
     secure = request.url.scheme == "https"
@@ -34,7 +43,7 @@ async def logout(response: Response):
 @router.post("/auth/change-password")
 async def change_password(data: PasswordChange, session=Depends(get_session), user=Depends(get_current_user)):
     repo = UserRepository(session); u = await repo.get_by_id(user["user_id"])
-    if not u: raise HTTPException(404)
-    if not verify_password(data.old_password, u.password_hash): raise HTTPException(403)
+    if not u: raise HTTPException(404, detail="Пользователь не найден")
+    if not verify_password(data.old_password, u.password_hash): raise HTTPException(403, detail="Неверный старый пароль")
     await repo.update(u.id, password_hash=hash_password(data.new_password), force_password_change=False)
     await session.commit(); return {"ok": True}
