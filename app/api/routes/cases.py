@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
-from app.repositories.case_repo import CaseRepository, ActivityRepository, CaseTemplateRepository, StageRepository
+from app.repositories.case_repo import CaseRepository
+from app.repositories.activity_repo import ActivityRepository
+from app.repositories.case_template_repo import CaseTemplateRepository
+from app.repositories.stage_repo import StageRepository
 from app.api.schemas.case import CaseCreate, CaseUpdate, CaseTransfer
 from app.models.case import Case
 from app.models.activity import Activity
