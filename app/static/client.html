@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный кабинет клиента</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;padding:40px 20px;max-width:800px;margin:0 auto}
+        h1{color:#1a1a2e;margin-bottom:24px;font-size:clamp(20px,5vw,28px)}
+        .card{background:white;padding:20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:16px}
+        .card h2{color:#c9a96e;margin-bottom:8px}
+        .badge{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block}
+        .badge-active{background:#27ae60;color:white}.badge-new{background:#3498db;color:white}.badge-closed{background:#888;color:white}
+        .error{color:#c0392b;text-align:center;margin-top:40px}
+    </style>
+</head>
+<body><h1>⚖️ Личный кабинет</h1><div id="content"></div>
+<script>
+const code = window.location.pathname.split('/').pop();
+fetch('/api/portal/'+code).then(r=>r.json()).then(data=>{
+    if(data.detail){document.getElementById('content').innerHTML='<div class="error">'+data.detail+'</div>';return}
+    let html=`<div class="card"><h2>${data.client.full_name}</h2><p>Ваши дела:</p></div>`;
+    data.cases.forEach(c=>{html+=`<div class="card"><h2>${c.title}</h2><p>Тип: ${c.case_type||'—'} | Статус: <span class="badge badge-${c.status==='new'?'new':c.status==='active'?'active':'closed'}">${c.status}</span></p>${c.description?`<p>${c.description}</p>`:''}</div>`});
+    document.getElementById('content').innerHTML=html;
+});
+</script>
+</body>
+</html>
